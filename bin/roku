@@ -1,0 +1,148 @@
+#!/bin/sh
+# shellcheck disable=SC2002
+set -aeu
+ROKU_HISTORY_DIR="${XDG_CACHE_HOME:-${HOME}/.cache}/roku"
+ROKU_HISTORY_FILE="${ROKU_HISTORY_DIR}/history"
+ROKU_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/roku"
+ROKU_CONFIG_FILE="${ROKU_CONFIG_DIR}/config.sh"
+ROKU_MEDIA_LIST="${ROKU_CONFIG_DIR}/watch.list"
+BIN_CURL='curl'
+BIN_EXPR='expr'
+BIN_FZF='fzf'
+BIN_JQ='jq'
+
+post() {
+	url="${1}"
+	url="http://${ROKU_HOST}/${url}"
+	"${BIN_CURL}" -d '' "${url}"
+}
+search() {
+	providers="${ROKU_PROVIDERS}"
+	querystring=''
+	_type=
+	# shellcheck disable=SC2235
+	if [ "${#}" -gt 1 ] && ([ "${1}" = movie ] || [ "${1}" = tv ] || [ "${1}" = tv-show ])
+	then
+		_type="${1}"
+		shift
+		if [ "${_type}" = tv ]
+		then
+			_type='tv-show'
+		fi
+	fi
+	title="$(encode "${@}")"
+	querystring="title=${title}"
+	if [ -n "${_type}" ]
+	then
+		querystring="${querystring}&type=${_type}"
+	fi
+	if [ "${_type}" = 'tv-show' ]
+	then
+		querystring="${querystring}&season=1"
+	fi
+	querystring="${querystring}&keyword=title"
+	querystring="${querystring}&match-any=true"
+	querystring="${querystring}&provider=${providers}"
+	querystring="${querystring}&launch=true"
+	url="search/browse?${querystring}"
+	post "${url}"
+}
+press() {
+	key="${1}"
+	url="keypress/${key}"
+	echo "Press: ${key}"
+	post "${url}"
+	sleep 1s
+}
+encode() {
+	printf %s "${*}" \
+	| "${BIN_JQ}" -sRr @uri \
+	;
+}
+deeplink() {
+	IFS='	'
+	# shellcheck disable=SC2068
+	set -- ${@}
+	_type="${1}"
+	if [ "${_type}" = tv ]
+	then
+		_type='tv-show'
+	fi
+	link="${2}"
+	if "${BIN_EXPR}" "${link}" : '^https://www.netflix.com/title/' >/dev/null
+	then
+		link="${link##*/}"
+		url="launch/12?contentId=${link}"
+		url="${url}&MediaType=${_type}"
+	elif "${BIN_EXPR}" "${link}" : '^https://www.amazon.com/' >/dev/null
+	then
+		link="${link##*/}"
+		url="launch/13?contentId=${link}"
+		url="${url}&MediaType=${_type}"
+	else
+		IFS=' '
+		# shellcheck disable=SC2068
+		set -- ${@}
+		search "${@}"
+		return 1
+	fi
+	post "${url}"
+}
+choose() {
+	[ -d "${ROKU_HISTORY_DIR}" ] || mkdir "${ROKU_HISTORY_DIR}"
+	"${BIN_FZF}" \
+		--with-nth=1,3,4,5 \
+		--delimiter='\t' \
+		--preview='echo "Title:" {3}; echo "Year:" {4}; echo "Genre:" {5}; echo; echo {6};' \
+		--preview-window='wrap' \
+		--history="${ROKU_HISTORY_FILE}" \
+	;
+}
+initialize_configuration() {
+	[ -d "${ROKU_CONFIG_DIR}" ] || mkdir "${ROKU_CONFIG_DIR}"
+	if ! [ -e "${ROKU_CONFIG_FILE}" ]
+	then
+		{
+			echo "ROKU_HOST=192.168.0.7:8060"
+			echo "ROKU_PROVIDERS='Netflix%2C+Prime+Video'"
+			echo "ROKU_MEDIA_LIST=\"${ROKU_MEDIA_LIST}\""
+		}>>"${ROKU_CONFIG_FILE}"
+	fi
+	if ! [ -e "${ROKU_MEDIA_LIST}" ]
+	then
+		{
+			printf "tv	https://www.netflix.com/title/80057281	Stranger Things	2016	Horror	Strange things are afoot in Hawkins, Indiana, where a young boy's sudden disappearance unearths a young girl with otherworldly powers."
+		}>>"${ROKU_MEDIA_LIST}"
+	fi
+}
+main() {
+	initialize_configuration
+	# shellcheck disable=SC1090
+	. "${ROKU_CONFIG_FILE}"
+	invoked_as="${1}"
+	shift
+	if "${BIN_EXPR}" "${invoked_as}" ':' '.*-press-.*' >/dev/null 2>&1
+	then
+		key="${invoked_as##*-press-}"
+		key="$(
+			echo "${key}" \
+			| tr '-' ' ' \
+			| awk '{for(j=1;j<=NF;j++){ $j=toupper(substr($j,1,1)) substr($j,2) }}1' \
+			| tr -d ' ' \
+		)"
+		press "${key}"
+		exit "${?}"
+	elif [ "${#}" -eq 0 ]
+	then
+		line="$(choose < "${ROKU_MEDIA_LIST}")"
+		if [ -n "${line}" ]
+		then
+			deeplink "${line}"
+		fi
+	else
+		search "${@}"
+	fi
+}
+
+invoked_as="$(basename "${0}")"
+main "${invoked_as}" "${@}"
