@@ -11,6 +11,22 @@ This tool provides a CLI interface for Roku devices on your local network.
 - `fzf`
 - `jq`
 
+## Install
+
+It can be installed on a per-user basis _or_ system-wide.
+
+### User
+
+```sh
+make install
+```
+
+### System
+
+```sh
+make install DESTDIR=/usr/local
+```
+
 ## Config
 
 ### `~/.config/roku/config.sh`
