@@ -6,6 +6,7 @@ ROKU_HISTORY_FILE="${ROKU_HISTORY_DIR}/history"
 ROKU_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/roku"
 ROKU_CONFIG_FILE="${ROKU_CONFIG_DIR}/config.sh"
 ROKU_MEDIA_LIST="${ROKU_CONFIG_DIR}/watch.list"
+ROKU_SEARCH_FAR_FROM_HOME="${ROKU_SEARCH_FAR_FROM_HOME:-3}"
 BIN_CURL='curl'
 BIN_EXPR='expr'
 BIN_FZF='fzf'
@@ -17,42 +18,32 @@ post() {
 	"${BIN_CURL}" -d '' "${url}"
 }
 search() {
-	providers="${ROKU_PROVIDERS}"
-	querystring=''
-	_type=
-	# shellcheck disable=SC2235
-	if [ "${#}" -gt 1 ] && ([ "${1}" = movie ] || [ "${1}" = tv ] || [ "${1}" = tv-show ])
-	then
-		_type="${1}"
-		shift
-		if [ "${_type}" = tv ]
-		then
-			_type='tv-show'
-		fi
-	fi
-	title="$(encode "${@}")"
-	querystring="title=${title}"
-	if [ -n "${_type}" ]
-	then
-		querystring="${querystring}&type=${_type}"
-	fi
-	if [ "${_type}" = 'tv-show' ]
-	then
-		querystring="${querystring}&season=1"
-	fi
-	querystring="${querystring}&keyword=title"
-	querystring="${querystring}&match-any=true"
-	querystring="${querystring}&provider=${providers}"
-	querystring="${querystring}&launch=true"
-	url="search/browse?${querystring}"
-	post "${url}"
+	press home
+	sleep .5s
+	for tmp in seq 1 ${ROKU_SEARCH_FAR_FROM_HOME}
+	do
+		press down
+	done
+	press right
+	tmp="${*}"
+	while [ -n "${tmp}" ]; do
+		tail="${tmp#?}"
+		first="${tmp%"${tail}"}"
+		key="Lit_$(encode "${first}")"
+		press "${key}"
+		tmp="${tail}"
+	done
+	for tmp in seq 1 6
+	do
+		press right
+	done
 }
 press() {
 	key="${1}"
 	url="keypress/${key}"
 	echo "Press: ${key}"
 	post "${url}"
-	sleep 1s
+	sleep .25s
 }
 encode() {
 	printf %s "${*}" \
