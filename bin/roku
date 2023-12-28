@@ -125,7 +125,7 @@ main() {
 			| tr -d ' ' \
 		)"
 		press "${key}"
-		exit "${?}"
+		return "${?}"
 	elif [ "${#}" -eq 0 ]
 	then
 		line="$(choose < "${ROKU_MEDIA_LIST}")"
