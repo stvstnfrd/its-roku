@@ -3,6 +3,7 @@
 set -aeu
 ROKU_HISTORY_DIR="${XDG_CACHE_HOME:-${HOME}/.cache}/roku"
 ROKU_HISTORY_FILE="${ROKU_HISTORY_DIR}/history"
+ROKU_LOG_FILE="${ROKU_HISTORY_DIR}/log"
 ROKU_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/roku"
 ROKU_CONFIG_FILE="${ROKU_CONFIG_DIR}/config.sh"
 ROKU_MEDIA_LIST="${ROKU_CONFIG_DIR}/watch.list"
@@ -16,9 +17,42 @@ BIN_CURL='curl'
 BIN_EXPR='expr'
 BIN_FZF='fzf'
 BIN_JQ='jq'
+LL_DEBUG=1
+LL_INFO=2
+LL_WARN=3
+LL_ERROR=4
+LL_NONE=5
+LOG_LEVEL="${LOG_LEVEL:-${LL_INFO}}"
+log() {
+	level="${1}"
+	shift
+	if [ "${level}" = DEBUG ]
+	then
+		level_number="${LL_DEBUG}"
+	elif [ "${level}" = INFO ]
+	then
+		level_number="${LL_INFO}"
+	elif [ "${level}" = WARN ]
+	then
+		level_number="${LL_WARN}"
+	elif [ "${level}" = ERROR ]
+	then
+		level_number="${LL_ERROR}"
+	else
+		level="${LL_NONE}"
+	fi
+	if [ "${level_number}" -lt "${LOG_LEVEL}" ]
+	then
+		return
+	fi
+	message="$(printf '%s' "${*}" | sed 's@[\t]@\\t@; s@^@\t@')"
+	date="$(date '+%Y-%m-%d %H:%M:%S')"
+	printf '%s\t%s%s\n' "${date}" "level=${level}" "${message}" >>"${ROKU_LOG_FILE}"
+}
 
 http_get() {
 	url="${1}"
+	log DEBUG "Fetching URL: ${url}"
 	"${BIN_CURL}" \
 		-L \
 		"${url}" \
@@ -32,9 +66,11 @@ http_get() {
 		-H 'Sec-Fetch-Site: same-origin' \
 		-H 'Sec-Fetch-User: ?1' \
 	;
+	log DEBUG "Fetched URL: ${url}"
 }
 http_search() {
 	data="${1}"
+	log DEBUG "Searching term: ${data}"
 	data="$(encode "${data}")"
 	data="q=${data}&kl=&df="
 	"${BIN_CURL}" \
@@ -54,13 +90,17 @@ http_search() {
 		-H 'Sec-Fetch-User: ?1' \
 		--data-raw "${data}" \
 	;
+	log DEBUG "Searched term: ${data}"
 }
 post() {
 	url="${1}"
 	url="http://${ROKU_HOST}/${url}"
+	log DEBUG "POSTing URL: ${url}"
 	"${BIN_CURL}" -d '' "${url}"
+	log DEBUG "POSTed URL: ${url}"
 }
 search() {
+	log INFO "Searching Roku for ${*}"
 	press home
 	sleep .5s
 	for tmp in seq 1 ${ROKU_SEARCH_FAR_FROM_HOME}
@@ -80,18 +120,22 @@ search() {
 	do
 		press right
 	done
+	log INFO "Searched Roku for ${*}"
 }
 press() {
 	key="${1}"
+	log DEBUG "Pressing key: ${key}"
 	url="keypress/${key}"
-	echo "Press: ${key}"
 	post "${url}"
 	sleep .25s
+	log DEBUG "Pressed key: ${key}"
 }
 encode() {
+	log DEBUG "Encoding text: ${*}"
 	printf %s "${*}" \
 	| "${BIN_JQ}" -sRr @uri \
 	;
+	log DEBUG "Encoded text: ${*}"
 }
 deeplink() {
 	IFS='	'
@@ -117,10 +161,14 @@ deeplink() {
 		IFS=' '
 		# shellcheck disable=SC2068
 		set -- ${@}
+		log INFO "Searching title: ${3}"
 		search "${@}"
+		log INFO "Searched title: ${3}"
 		return 1
 	fi
+	log INFO "Launching title: ${3}"
 	post "${url}"
+	log INFO "Launched title: ${3}"
 }
 choose() {
 	[ -d "${ROKU_HISTORY_DIR}" ] || mkdir "${ROKU_HISTORY_DIR}"
@@ -138,6 +186,7 @@ choose() {
 	;
 }
 initialize_configuration() {
+	log DEBUG Initializing configuration...
 	[ -d "${ROKU_CONFIG_DIR}" ] || mkdir "${ROKU_CONFIG_DIR}"
 	if ! [ -e "${ROKU_CONFIG_FILE}" ]
 	then
@@ -153,8 +202,10 @@ initialize_configuration() {
 			printf "tv	https://www.netflix.com/title/80057281	Stranger Things	2016	Horror	Strange things are afoot in Hawkins, Indiana, where a young boy's sudden disappearance unearths a young girl with otherworldly powers."
 		}>>"${ROKU_MEDIA_LIST}"
 	fi
+	log DEBUG Initialized configuration.
 }
 main() {
+	log DEBUG Starting program...
 	initialize_configuration
 	# shellcheck disable=SC1090
 	. "${ROKU_CONFIG_FILE}"
@@ -204,14 +255,14 @@ main() {
 		elif [ "${code}" -eq 2 ]
 		then
 			# error
-			echo "WTF: ERROR: ${code}"
+			log ERROR "Errored title selection"
 		elif [ "${code}" -eq 130 ]
 		then
 			# interupt
-			echo "WTF: INTERUPT: ${code}"
+			log DEBUG "Cancelled title selection"
 		else
 			# unexpected
-			echo "WTF: UNEXPECTED: ${code}"
+			log DEBUG "Unexpected problem with title selection"
 		fi
 	else
 		search "${@}"
@@ -226,6 +277,7 @@ netflix_parse_year() {
 }
 netflix_search() {
 	query="${1}"
+	log INFO "Searching Netflix for '${query}'"
 	http_search "site:www.netflix.com ${query}" >"${OUTPUT}"
 	grep "href=\"https://www\.netflix.com/\(ph-en/\)\?[Tt]itle" "${OUTPUT}" \
 	| sed 's@.*href="@@; s@".*@@;' \
@@ -247,9 +299,11 @@ netflix_search() {
 		printf '\n' >> "${SEARCH_LIST}"
 	done \
 	;
+	log INFO "Searched Netflix for '${query}'"
 }
 prime_search() {
 	query="${1}"
+	log INFO "Searching Prime for '${query}'"
 	http_search "site:amazon.com ${query}" >"${OUTPUT}"
 	grep "href=\"https://www.amazon.com/.*Prime Video" "${OUTPUT}" \
 	| sed 's@.*href="@@; s@".*@@;' \
@@ -271,8 +325,10 @@ prime_search() {
 		printf '\n' >> "${SEARCH_LIST}"
 	done \
 	;
+	log INFO "Searched Prime for '${query}'"
 }
 roku_list_add() {
+	log INFO Adding a new title...
 	if [ -n "${1:-}" ]
 	then
 		line="${1}"
@@ -286,6 +342,7 @@ roku_list_add() {
 	prime_search "${line}"
 	if [ -e "${SEARCH_LIST}" ]
 	then
+		log DEBUG Selecting a new title...
 		line="$(fzf \
 			--delimiter='\t' \
 			--with-nth=1,3,4,5 \
@@ -298,15 +355,23 @@ roku_list_add() {
 		if [ -n "${line}" ]
 		then
 			printf '%s\n' "${line}" >>"${HOME}/.config/roku/watch.list"
+			log DEBUG Selected a new title.
+		else
+			log DEBUG Canceled a new title.
 		fi
 		rm "${SEARCH_LIST}" 2>/dev/null || true
 	fi
+	log INFO Added a new title...
 }
 on_exit() {
+	log INFO Exiting...
 	code="${?}"
-	echo "exiting..."
+	log DEBUG Cleaning up temporary files...
 	rm "${ROKU_MEDIA_QUERY}" 2>/dev/null || true
 	rm "${SEARCH_LIST}" 2>/dev/null || true
+	log DEBUG Cleaned up temporary files.
+	log INFO Exited.
+	log INFO
 	exit "${code}"
 }
 
