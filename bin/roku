@@ -116,9 +116,10 @@ search() {
 		press "${key}"
 		tmp="${tail}"
 	done
-	for tmp in seq 1 6
+	for tmp in $(seq 1 6)
 	do
 		press right
+		sleep .1s
 	done
 	log INFO "Searched Roku for ${*}"
 }
