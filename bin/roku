@@ -11,7 +11,8 @@ ROKU_MEDIA_WATCHED="${ROKU_CONFIG_DIR}/watched.list"
 ROKU_MEDIA_QUERY="${ROKU_HISTORY_DIR}/query.list"
 ROKU_SEARCH_FAR_FROM_HOME="${ROKU_SEARCH_FAR_FROM_HOME:-3}"
 SEARCH_URL='https://lite.duckduckgo.com/lite/'
-OUTPUT=./nflx
+OUTPUT="${ROKU_HISTORY_DIR}/search.html"
+OUTPUT_TITLE="${ROKU_HISTORY_DIR}/title.html"
 SEARCH_LIST=search.list
 BIN_CURL='curl'
 BIN_EXPR='expr'
@@ -295,11 +296,11 @@ netflix_search() {
 	| sort \
 	| while read -r url
 	do
-		http_get "${url}" >"${OUTPUT}.html"
+		http_get "${url}" >"${OUTPUT_TITLE}"
 		# shellcheck disable=2094
-		grep '<script type="application/ld+json">' < "${OUTPUT}.html" \
+		grep '<script type="application/ld+json">' < "${OUTPUT_TITLE}" \
 		| sed 's@^.*<script type="application/ld+json">@@; s@<.*@@' \
-		| jq '.["@type"], .url, .name, "'"$(netflix_parse_year "${OUTPUT}.html")"'", .genre, .description' \
+		| jq '.["@type"], .url, .name, "'"$(netflix_parse_year "${OUTPUT_TITLE}")"'", .genre, .description' \
 		| sed 's@^"@@; s@"$@@; s@\\"@"@g' \
 		| tr '\n' '\t' \
 		| sed 's@\s*$@@' \
@@ -321,8 +322,8 @@ prime_search() {
 	| sort \
 	| while read -r url
 	do
-		http_get "${url}" >"${OUTPUT}.html"
-		grep '<script type="text/template">' < "${OUTPUT}.html" \
+		http_get "${url}" >"${OUTPUT_TITLE}"
+		grep '<script type="text/template">' < "${OUTPUT_TITLE}" \
 		| sed 's@^.*<script type="text/template">@@; s@<.*@@' \
 		| jq '.props .state .detail .headerDetail[] | .titleType, "'"${url}"'", .title, .releaseYear, ([.genres[].text]|join("; ")), .synopsis' \
 		2>/dev/null \
