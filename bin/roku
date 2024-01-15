@@ -213,13 +213,13 @@ initialize_configuration() {
 			printf "tv	https://www.netflix.com/title/80057281	Stranger Things	2016	Horror	Strange things are afoot in Hawkins, Indiana, where a young boy's sudden disappearance unearths a young girl with otherworldly powers."
 		}>>"${ROKU_MEDIA_LIST}"
 	fi
+	# shellcheck disable=SC1090
+	. "${ROKU_CONFIG_FILE}"
 	log DEBUG Initialized configuration.
 }
 main() {
 	log DEBUG Starting program...
 	initialize_configuration
-	# shellcheck disable=SC1090
-	. "${ROKU_CONFIG_FILE}"
 	invoked_as="${1}"
 	shift
 	if [ "${invoked_as}" = 'roku-list-add' ]
