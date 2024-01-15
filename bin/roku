@@ -138,7 +138,6 @@ search() {
 press() {
 	for key in "${@}"
 	do
-		echo "${key}"
 		log DEBUG "Pressing key: ${key}"
 		url="keypress/${key}"
 		post "${url}"
