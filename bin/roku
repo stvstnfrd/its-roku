@@ -281,6 +281,9 @@ main() {
 	elif [ "${invoked_as}" = 'roku-type' ]
 	then
 		type_text "${@}"
+	elif [ "${invoked_as}" = 'roku-discover' ]
+	then
+		discover "${@}"
 	elif "${BIN_EXPR}" "${invoked_as}" ':' '.*-press-.*' >/dev/null 2>&1
 	then
 		key="${invoked_as##*-press-}"
@@ -443,6 +446,20 @@ remote() {
 			;;
 			q) return;;
 		esac
+	done
+}
+discover() {
+	# This assumes we're searching a /24 subnet... manually.
+	ip="$(ip route get 1 | awk '{print $3; exit}' | sed 's@\.[^.]\+$@@')"
+	for i in $(seq 0 254)
+	do
+		if match="$(curl --connect-timeout .5 --silent "${ip}.${i}:8060/query/device-info" | grep --only-matching '<friendly-device-name>.*')"
+		then
+			match="$(echo "${match}" | sed 's@^\s*<[^>]*>@@; s@<\/[^>]*>$@@')"
+			printf '%s.%s\t%s\n' "${ip}" "${i}" "${match}"
+		else
+			echo "${ip}.${i}" >>/dev/stderr
+		fi
 	done
 }
 on_exit() {
