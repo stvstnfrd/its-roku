@@ -224,6 +224,44 @@ initialize_configuration() {
 	. "${ROKU_CONFIG_FILE}"
 	log DEBUG Initialized configuration.
 }
+list() {
+	set +e
+	line="$(choose < "${ROKU_MEDIA_LIST}" | tail -n1)"
+	code="${?}"
+	set -e
+	if [ "${code}" -eq 0 ]
+	then
+		# match
+		if [ -n "${line}" ]
+		then
+			if printf '%s' "${line}" | grep -q '	'
+			then
+				deeplink "${line}"
+				return "${?}"
+			else
+				roku_list_add "${line}"
+			fi
+		fi
+	elif [ "${code}" -eq 1 ]
+	then
+		# no match
+		if [ -n "${line}" ]
+		then
+			roku_list_add "${line}"
+		fi
+	elif [ "${code}" -eq 2 ]
+	then
+		# error
+		log ERROR "Errored title selection"
+	elif [ "${code}" -eq 130 ]
+	then
+		# interupt
+		log DEBUG "Cancelled title selection"
+	else
+		# unexpected
+		log DEBUG "Unexpected problem with title selection"
+	fi
+}
 main() {
 	log DEBUG Starting program...
 	initialize_configuration
@@ -246,42 +284,7 @@ main() {
 		return "${?}"
 	elif [ "${#}" -eq 0 ]
 	then
-		set +e
-		line="$(choose < "${ROKU_MEDIA_LIST}" | tail -n1)"
-		code="${?}"
-		set -e
-		if [ "${code}" -eq 0 ]
-		then
-			# match
-			if [ -n "${line}" ]
-			then
-				if printf '%s' "${line}" | grep -q '	'
-				then
-					deeplink "${line}"
-					return "${?}"
-				else
-					roku_list_add "${line}"
-				fi
-			fi
-		elif [ "${code}" -eq 1 ]
-		then
-			# no match
-			if [ -n "${line}" ]
-			then
-				roku_list_add "${line}"
-			fi
-		elif [ "${code}" -eq 2 ]
-		then
-			# error
-			log ERROR "Errored title selection"
-		elif [ "${code}" -eq 130 ]
-		then
-			# interupt
-			log DEBUG "Cancelled title selection"
-		else
-			# unexpected
-			log DEBUG "Unexpected problem with title selection"
-		fi
+		list
 	else
 		search "${@}"
 	fi
