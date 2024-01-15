@@ -272,6 +272,9 @@ main() {
 	if [ "${invoked_as}" = 'roku-list-add' ]
 	then
 		roku_list_add "${@}"
+	elif [ "${invoked_as}" = 'roku-remote' ]
+	then
+		remote "${@}"
 	elif "${BIN_EXPR}" "${invoked_as}" ':' '.*-press-.*' >/dev/null 2>&1
 	then
 		key="${invoked_as##*-press-}"
@@ -385,6 +388,56 @@ roku_list_add() {
 		rm "${SEARCH_LIST}" 2>/dev/null || true
 	fi
 	log INFO Added a new title...
+}
+read_char() {
+  stty -icanon -echo
+  eval "$1=\$(dd bs=1 count=1 2>/dev/null)"
+  stty icanon echo
+}
+
+remote() {
+	echo "h) left"
+	echo "j) down"
+	echo "k) up"
+	echo "l) right"
+	echo
+	echo "u) home"
+	echo "b) back"
+	echo "x) backspace"
+	echo "f) fwd"
+	echo "i) info"
+	echo "p) play"
+	echo "r) rev"
+	echo
+	echo "SPACE) select"
+	echo "ENTER) enter"
+	echo
+	echo "q) quit (or CTRL-C)"
+	echo
+	while read_char input
+	do
+		case "${input}" in
+			h) press left;;
+			j) press down;;
+			k) press up;;
+			l) press right;;
+			u) press home;;
+			b) press back;;
+			x) press backspace;;
+			n) press enter;;
+			f) press fwd;;
+			i) press info;;
+			p) press play;;
+			r) press rev;;
+			' ') press select;;
+			'') press enter;;
+			t)
+				read -r line
+				type_text "${line}"
+			;;
+			q) return;;
+		esac
+	done
 }
 on_exit() {
 	log INFO Exiting...
