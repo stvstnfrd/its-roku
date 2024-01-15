@@ -109,27 +109,30 @@ post() {
 	;
 	log DEBUG "POSTed URL: ${url}"
 }
-search() {
-	log INFO "Searching Roku for ${*}"
-	press home
-	sleep .5s
-	for tmp in seq 1 ${ROKU_SEARCH_FAR_FROM_HOME}
-	do
-		press down
-	done
-	press right
+type_text() {
 	tmp="${*}"
 	while [ -n "${tmp}" ]; do
 		tail="${tmp#?}"
 		first="${tmp%"${tail}"}"
 		key="Lit_$(encode "${first}")"
 		press "${key}"
+		sleep .1s
 		tmp="${tail}"
 	done
+}
+search() {
+	log INFO "Searching Roku for ${*}"
+	press home
+	sleep .5s
+	for tmp in $(seq 1 ${ROKU_SEARCH_FAR_FROM_HOME})
+	do
+		press down
+	done
+	press right
+	type_text "${@}"
 	for tmp in $(seq 1 6)
 	do
 		press right
-		sleep .1s
 	done
 	log INFO "Searched Roku for ${*}"
 }
