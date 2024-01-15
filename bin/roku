@@ -50,7 +50,6 @@ log() {
 	date="$(date '+%Y-%m-%d %H:%M:%S')"
 	printf '%s\t%s%s\n' "${date}" "level=${level}" "${message}" >>"${ROKU_LOG_FILE}"
 }
-
 http_get() {
 	url="${1}"
 	log DEBUG "Fetching URL: ${url}"
