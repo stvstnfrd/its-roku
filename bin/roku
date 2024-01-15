@@ -134,12 +134,19 @@ search() {
 	log INFO "Searched Roku for ${*}"
 }
 press() {
-	key="${1}"
-	log DEBUG "Pressing key: ${key}"
-	url="keypress/${key}"
-	post "${url}"
-	sleep .25s
-	log DEBUG "Pressed key: ${key}"
+	for key in "${@}"
+	do
+		echo "${key}"
+		log DEBUG "Pressing key: ${key}"
+		url="keypress/${key}"
+		post "${url}"
+		log DEBUG "Pressed key: ${key}"
+		sleep .5s
+		if [ "${key}" = home ]
+		then
+			sleep 1s
+		fi
+	done
 }
 encode() {
 	log DEBUG "Encoding text: ${*}"
