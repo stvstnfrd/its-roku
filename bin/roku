@@ -332,7 +332,9 @@ prime_search() {
 	| sort \
 	| while read -r url
 	do
-		http_get "${url}" >"${OUTPUT_TITLE}"
+		http_get "${url}" >"${OUTPUT_TITLE}.gz"
+		gzip -d >"${OUTPUT_TITLE}" <"${OUTPUT_TITLE}.gz" \
+		|| mv "${OUTPUT_TITLE}.gz" "${OUTPUT_TITLE}"
 		grep '<script type="text/template">' < "${OUTPUT_TITLE}" \
 		| sed 's@^.*<script type="text/template">@@; s@<.*@@' \
 		| jq '.props .state .detail .headerDetail[] | .titleType, "'"${url}"'", .title, .releaseYear, ([.genres[].text]|join("; ")), .synopsis' \
