@@ -284,6 +284,9 @@ main() {
 	elif [ "${invoked_as}" = 'roku-discover' ]
 	then
 		discover "${@}"
+	elif "${BIN_EXPR}" "${invoked_as}" ':' '.*-press' >/dev/null 2>&1
+	then
+		press "${@}"
 	elif "${BIN_EXPR}" "${invoked_as}" ':' '.*-press-.*' >/dev/null 2>&1
 	then
 		key="${invoked_as##*-press-}"
