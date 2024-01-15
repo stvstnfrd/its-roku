@@ -272,7 +272,6 @@ main() {
 	if [ "${invoked_as}" = 'roku-list-add' ]
 	then
 		roku_list_add "${@}"
-		return "${?}"
 	elif "${BIN_EXPR}" "${invoked_as}" ':' '.*-press-.*' >/dev/null 2>&1
 	then
 		key="${invoked_as##*-press-}"
@@ -283,7 +282,6 @@ main() {
 			| tr -d ' ' \
 		)"
 		press "${key}"
-		return "${?}"
 	elif [ "${#}" -eq 0 ]
 	then
 		list
