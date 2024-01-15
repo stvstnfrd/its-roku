@@ -278,6 +278,9 @@ main() {
 	elif [ "${invoked_as}" = 'roku-search' ]
 	then
 		search "${@}"
+	elif [ "${invoked_as}" = 'roku-type' ]
+	then
+		type_text "${@}"
 	elif "${BIN_EXPR}" "${invoked_as}" ':' '.*-press-.*' >/dev/null 2>&1
 	then
 		key="${invoked_as##*-press-}"
