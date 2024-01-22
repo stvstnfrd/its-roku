@@ -238,7 +238,6 @@ list() {
 			if printf '%s' "${line}" | grep -q '	'
 			then
 				deeplink "${line}"
-				return "${?}"
 			else
 				roku_list_add "${line}"
 			fi
