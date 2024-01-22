@@ -354,8 +354,8 @@ prime_search() {
 		|| mv "${OUTPUT_TITLE}.gz" "${OUTPUT_TITLE}"
 		grep '<script type="text/template">' < "${OUTPUT_TITLE}" \
 		| sed 's@^.*<script type="text/template">@@; s@<.*@@' \
-		| jq '.props .state .detail .headerDetail[] | .titleType, "'"${url}"'", .title, .releaseYear, ([.genres[].text]|join("; ")), .synopsis' \
-		2>/dev/null \
+		| jq '.props .body[0] .props .atf .state .detail .headerDetail[] | .titleType, "'"${url}"'", .title, .releaseYear, ([.genres[].text]|join("; ")), .synopsis' \
+		2>"${HOME}/.cache/roku/stderr" \
 		| sed 's@^"@@; s@"$@@; s@\\"@"@g' \
 		| tr '\n' '\t' \
 		| sed 's@\s*$@@' \
