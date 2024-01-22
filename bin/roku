@@ -3,53 +3,158 @@
 set -aeu
 ROKU_HISTORY_DIR="${XDG_CACHE_HOME:-${HOME}/.cache}/roku"
 ROKU_HISTORY_FILE="${ROKU_HISTORY_DIR}/history"
+ROKU_LOG_FILE="${ROKU_HISTORY_DIR}/log"
 ROKU_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/roku"
 ROKU_CONFIG_FILE="${ROKU_CONFIG_DIR}/config.sh"
 ROKU_MEDIA_LIST="${ROKU_CONFIG_DIR}/watch.list"
 ROKU_MEDIA_WATCHED="${ROKU_CONFIG_DIR}/watched.list"
+ROKU_MEDIA_QUERY="${ROKU_HISTORY_DIR}/query.list"
 ROKU_SEARCH_FAR_FROM_HOME="${ROKU_SEARCH_FAR_FROM_HOME:-3}"
+SEARCH_URL='https://lite.duckduckgo.com/lite/'
+OUTPUT="${ROKU_HISTORY_DIR}/search.html"
+OUTPUT_TITLE="${ROKU_HISTORY_DIR}/title.html"
+SEARCH_LIST="${ROKU_HISTORY_DIR}/search.list"
 BIN_CURL='curl'
 BIN_EXPR='expr'
 BIN_FZF='fzf'
 BIN_JQ='jq'
-
+LL_DEBUG=1
+LL_INFO=2
+LL_WARN=3
+LL_ERROR=4
+LL_NONE=5
+LOG_LEVEL="${LOG_LEVEL:-${LL_INFO}}"
+log() {
+	level="${1}"
+	shift
+	if [ "${level}" = DEBUG ]
+	then
+		level_number="${LL_DEBUG}"
+	elif [ "${level}" = INFO ]
+	then
+		level_number="${LL_INFO}"
+	elif [ "${level}" = WARN ]
+	then
+		level_number="${LL_WARN}"
+	elif [ "${level}" = ERROR ]
+	then
+		level_number="${LL_ERROR}"
+	else
+		level="${LL_NONE}"
+	fi
+	if [ "${level_number}" -lt "${LOG_LEVEL}" ]
+	then
+		return
+	fi
+	message="$(printf '%s' "${*}" | sed 's@[\t]@\\t@; s@^@\t@')"
+	date="$(date '+%Y-%m-%d %H:%M:%S')"
+	printf '%s\t%s%s\n' "${date}" "level=${level}" "${message}" >>"${ROKU_LOG_FILE}"
+}
+http_get() {
+	url="${1}"
+	log DEBUG "Fetching URL: ${url}"
+	"${BIN_CURL}" \
+		-L \
+		"${url}" \
+		--silent \
+		--show-error \
+		-H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:103.0) Gecko/20100101 Firefox/103.0' \
+		-H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8' \
+		-H 'Accept-Language: en-US,en;q=0.5' \
+		-H 'Connection: keep-alive' \
+		-H 'Upgrade-Insecure-Requests: 1' \
+		-H 'Sec-Fetch-Dest: document' \
+		-H 'Sec-Fetch-Mode: navigate' \
+		-H 'Sec-Fetch-Site: same-origin' \
+		-H 'Sec-Fetch-User: ?1' \
+	;
+	log DEBUG "Fetched URL: ${url}"
+}
+http_search() {
+	data="${1}"
+	log DEBUG "Searching term: ${data}"
+	data="$(encode "${data}")"
+	data="q=${data}&kl=&df="
+	"${BIN_CURL}" \
+		"${SEARCH_URL}" \
+		-X POST \
+		--silent \
+		--show-error \
+		-H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:103.0) Gecko/20100101 Firefox/103.0' \
+		-H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8' \
+		-H 'Accept-Language: en-US,en;q=0.5' \
+		-H 'Referer: https://lite.duckduckgo.com/' \
+		-H 'Content-Type: application/x-www-form-urlencoded' \
+		-H 'Origin: https://lite.duckduckgo.com' \
+		-H 'Connection: keep-alive' \
+		-H 'Upgrade-Insecure-Requests: 1' \
+		-H 'Sec-Fetch-Dest: document' \
+		-H 'Sec-Fetch-Mode: navigate' \
+		-H 'Sec-Fetch-Site: same-origin' \
+		-H 'Sec-Fetch-User: ?1' \
+		--data-raw "${data}" \
+	;
+	log DEBUG "Searched term: ${data}"
+}
 post() {
 	url="${1}"
 	url="http://${ROKU_HOST}/${url}"
-	"${BIN_CURL}" -d '' "${url}"
+	log DEBUG "POSTing URL: ${url}"
+	"${BIN_CURL}" \
+		-d '' \
+		--silent \
+		--show-error \
+		"${url}" \
+	;
+	log DEBUG "POSTed URL: ${url}"
 }
-search() {
-	press home
-	sleep .5s
-	for tmp in seq 1 ${ROKU_SEARCH_FAR_FROM_HOME}
-	do
-		press down
-	done
-	press right
+type_text() {
 	tmp="${*}"
 	while [ -n "${tmp}" ]; do
 		tail="${tmp#?}"
 		first="${tmp%"${tail}"}"
 		key="Lit_$(encode "${first}")"
 		press "${key}"
+		sleep .1s
 		tmp="${tail}"
 	done
-	for tmp in seq 1 6
+}
+search() {
+	log INFO "Searching Roku for ${*}"
+	press home
+	sleep .5s
+	for tmp in $(seq 1 ${ROKU_SEARCH_FAR_FROM_HOME})
+	do
+		press down
+	done
+	press right
+	type_text "${@}"
+	for tmp in $(seq 1 6)
 	do
 		press right
 	done
+	log INFO "Searched Roku for ${*}"
 }
 press() {
-	key="${1}"
-	url="keypress/${key}"
-	echo "Press: ${key}"
-	post "${url}"
-	sleep .25s
+	for key in "${@}"
+	do
+		log DEBUG "Pressing key: ${key}"
+		url="keypress/${key}"
+		post "${url}"
+		log DEBUG "Pressed key: ${key}"
+		sleep .5s
+		if [ "${key}" = home ]
+		then
+			sleep 1s
+		fi
+	done
 }
 encode() {
+	log DEBUG "Encoding text: ${*}"
 	printf %s "${*}" \
 	| "${BIN_JQ}" -sRr @uri \
 	;
+	log DEBUG "Encoded text: ${*}"
 }
 deeplink() {
 	IFS='	'
@@ -75,24 +180,32 @@ deeplink() {
 		IFS=' '
 		# shellcheck disable=SC2068
 		set -- ${@}
+		log INFO "Searching title: ${3}"
 		search "${@}"
+		log INFO "Searched title: ${3}"
 		return 1
 	fi
+	log INFO "Launching title: ${3}"
 	post "${url}"
+	log INFO "Launched title: ${3}"
 }
 choose() {
 	[ -d "${ROKU_HISTORY_DIR}" ] || mkdir "${ROKU_HISTORY_DIR}"
+	rm "${ROKU_MEDIA_QUERY}" 2>/dev/null || true
 	"${BIN_FZF}" \
 		--bind="ctrl-w:execute(echo {}>>\"${ROKU_MEDIA_WATCHED}\")+execute(url=\$(echo {2} | sed 's@/@\\\/@g'); sed -i \"/\$url/d\" \"${ROKU_MEDIA_LIST}\")+reload(cat \"${ROKU_MEDIA_LIST}\")" \
 		--bind="ctrl-x:execute(url=\$(echo {2} | sed 's@/@\\\/@g'); sed -i \"/\$url/d\" \"${ROKU_MEDIA_LIST}\")+reload(cat \"${ROKU_MEDIA_LIST}\")" \
+		--bind="ctrl-a:print-query" \
+		--print-query \
 		--with-nth=1,3,4,5 \
 		--delimiter='\t' \
-		--preview='echo "Title:" {3}; echo "Year:" {4}; echo "Genre:" {5}; echo; echo {6};' \
+		--preview='echo "Title:" {3}; echo "Year:" {4}; echo "Genre:" {5}; echo; echo {6}; echo; echo {2};' \
 		--preview-window='wrap' \
 		--history="${ROKU_HISTORY_FILE}" \
 	;
 }
 initialize_configuration() {
+	log DEBUG Initializing configuration...
 	[ -d "${ROKU_CONFIG_DIR}" ] || mkdir "${ROKU_CONFIG_DIR}"
 	if ! [ -e "${ROKU_CONFIG_FILE}" ]
 	then
@@ -108,14 +221,74 @@ initialize_configuration() {
 			printf "tv	https://www.netflix.com/title/80057281	Stranger Things	2016	Horror	Strange things are afoot in Hawkins, Indiana, where a young boy's sudden disappearance unearths a young girl with otherworldly powers."
 		}>>"${ROKU_MEDIA_LIST}"
 	fi
-}
-main() {
-	initialize_configuration
 	# shellcheck disable=SC1090
 	. "${ROKU_CONFIG_FILE}"
+	log DEBUG Initialized configuration.
+}
+list() {
+	set +e
+	line="$(choose < "${ROKU_MEDIA_LIST}" | tail -n1)"
+	code="${?}"
+	set -e
+	if [ "${code}" -eq 0 ]
+	then
+		# match
+		if [ -n "${line}" ]
+		then
+			if printf '%s' "${line}" | grep -q '	'
+			then
+				deeplink "${line}"
+			else
+				roku_list_add "${line}"
+			fi
+		fi
+	elif [ "${code}" -eq 1 ]
+	then
+		# no match
+		if [ -n "${line}" ]
+		then
+			roku_list_add "${line}"
+		fi
+	elif [ "${code}" -eq 2 ]
+	then
+		# error
+		log ERROR "Errored title selection"
+	elif [ "${code}" -eq 130 ]
+	then
+		# interupt
+		log DEBUG "Cancelled title selection"
+	else
+		# unexpected
+		log DEBUG "Unexpected problem with title selection"
+	fi
+}
+main() {
+	log DEBUG Starting program...
+	initialize_configuration
 	invoked_as="${1}"
 	shift
-	if "${BIN_EXPR}" "${invoked_as}" ':' '.*-press-.*' >/dev/null 2>&1
+	if [ "${invoked_as}" = 'roku-list-add' ]
+	then
+		roku_list_add "${@}"
+	elif [ "${invoked_as}" = 'roku-remote' ]
+	then
+		remote "${@}"
+	elif [ "${invoked_as}" = 'roku-search' ]
+	then
+		search "${@}"
+	elif [ "${invoked_as}" = 'roku-info' ]
+	then
+		info "${@}"
+	elif [ "${invoked_as}" = 'roku-type' ]
+	then
+		type_text "${@}"
+	elif [ "${invoked_as}" = 'roku-discover' ]
+	then
+		discover "${@}"
+	elif "${BIN_EXPR}" "${invoked_as}" ':' '.*-press' >/dev/null 2>&1
+	then
+		press "${@}"
+	elif "${BIN_EXPR}" "${invoked_as}" ':' '.*-press-.*' >/dev/null 2>&1
 	then
 		key="${invoked_as##*-press-}"
 		key="$(
@@ -125,18 +298,192 @@ main() {
 			| tr -d ' ' \
 		)"
 		press "${key}"
-		return "${?}"
 	elif [ "${#}" -eq 0 ]
 	then
-		line="$(choose < "${ROKU_MEDIA_LIST}")"
-		if [ -n "${line}" ]
-		then
-			deeplink "${line}"
-		fi
+		list
 	else
 		search "${@}"
 	fi
 }
+netflix_parse_year() {
+	input="${1}"
+	grep '<span class="title-info-metadata-item item-year" data-uia="item-year">' \
+	<"${input}" \
+	| sed 's@.*data-uia="item-year">@@; s@<.*@@' \
+	;
+}
+netflix_search() {
+	query="${1}"
+	log INFO "Searching Netflix for '${query}'"
+	http_search "site:www.netflix.com ${query}" >"${OUTPUT}"
+	grep "href=\"https://www\.netflix.com/\(ph-en/\)\?[Tt]itle" "${OUTPUT}" \
+	| sed 's@.*href="@@; s@".*@@;' \
+	| uniq \
+	| sort \
+	| while read -r url
+	do
+		http_get "${url}" >"${OUTPUT_TITLE}"
+		# shellcheck disable=2094
+		grep '<script type="application/ld+json">' < "${OUTPUT_TITLE}" \
+		| sed 's@^.*<script type="application/ld+json">@@; s@<.*@@' \
+		| jq '.["@type"], .url, .name, "'"$(netflix_parse_year "${OUTPUT_TITLE}")"'", .genre, .description' \
+		| sed 's@^"@@; s@"$@@; s@\\"@"@g' \
+		| tr '\n' '\t' \
+		| sed 's@\s*$@@' \
+		| sed 's@^TVSeries@tv@; s@^Movie@movie@' \
+		>>"${SEARCH_LIST}" \
+		;
+		printf '\n' >> "${SEARCH_LIST}"
+	done \
+	;
+	log INFO "Searched Netflix for '${query}'"
+}
+prime_search() {
+	query="${1}"
+	log INFO "Searching Prime for '${query}'"
+	http_search "site:amazon.com ${query}" >"${OUTPUT}"
+	grep "href=\"https://www.amazon.com/.*Prime Video" "${OUTPUT}" \
+	| sed 's@.*href="@@; s@".*@@;' \
+	| uniq \
+	| sort \
+	| while read -r url
+	do
+		log INFO "Fetching result: ${url}"
+		http_get "${url}" >"${OUTPUT_TITLE}.gz"
+		gzip -d >"${OUTPUT_TITLE}" <"${OUTPUT_TITLE}.gz" \
+		|| mv "${OUTPUT_TITLE}.gz" "${OUTPUT_TITLE}"
+		grep '<script type="text/template">' < "${OUTPUT_TITLE}" \
+		| sed 's@^.*<script type="text/template">@@; s@<.*@@' \
+		| jq '.props .body[0] .props .atf .state .detail .headerDetail[] | .titleType, "'"${url}"'", .title, .releaseYear, ([.genres[].text]|join("; ")), .synopsis' \
+		2>"${HOME}/.cache/roku/stderr" \
+		| sed 's@^"@@; s@"$@@; s@\\"@"@g' \
+		| tr '\n' '\t' \
+		| sed 's@\s*$@@' \
+		| sed 's@^TVSeries@tv@; s@^Movie@movie@; s@^season@tv@' \
+		>>"${SEARCH_LIST}" \
+		;
+		printf '\n' >> "${SEARCH_LIST}"
+	done \
+	;
+	log INFO "Searched Prime for '${query}'"
+}
+roku_list_add() {
+	log INFO Adding a new title...
+	if [ -n "${1:-}" ]
+	then
+		line="${1}"
+		shift
+	else
+		echo "ADD TO LIST: "
+		read -r line
+	fi
+	! [ -e "${SEARCH_LIST}" ] || rm "${SEARCH_LIST}"
+	netflix_search "${line}"
+	prime_search "${line}"
+	if [ -e "${SEARCH_LIST}" ]
+	then
+		log DEBUG Selecting a new title...
+		line="$("${BIN_FZF}" \
+			--delimiter='\t' \
+			--with-nth=1,3,4,5 \
+			--multi \
+			--delimiter='\t' \
+			--preview='echo "Title:" {3}; echo "Year:" {4}; echo "Genre:" {5}; echo; echo {6}; echo; echo {2};' \
+			--preview-window='wrap' \
+			<"${SEARCH_LIST}" \
+		)"
+		if [ -n "${line}" ]
+		then
+			printf '%s\n' "${line}" >>"${HOME}/.config/roku/watch.list"
+			log DEBUG Selected a new title.
+		else
+			log DEBUG Canceled a new title.
+		fi
+		rm "${SEARCH_LIST}" 2>/dev/null || true
+	fi
+	log INFO Added a new title...
+}
+read_char() {
+  stty -icanon -echo
+  eval "$1=\$(dd bs=1 count=1 2>/dev/null)"
+  stty icanon echo
+}
 
+remote() {
+	echo "h) left"
+	echo "j) down"
+	echo "k) up"
+	echo "l) right"
+	echo
+	echo "u) home"
+	echo "b) back"
+	echo "x) backspace"
+	echo "f) fwd"
+	echo "i) info"
+	echo "p) play"
+	echo "r) rev"
+	echo
+	echo "SPACE) select"
+	echo "ENTER) enter"
+	echo
+	echo "q) quit (or CTRL-C)"
+	echo
+	while read_char input
+	do
+		case "${input}" in
+			h) press left;;
+			j) press down;;
+			k) press up;;
+			l) press right;;
+			u) press home;;
+			b) press back;;
+			x) press backspace;;
+			n) press enter;;
+			f) press fwd;;
+			i) press info;;
+			p) press play;;
+			r) press rev;;
+			' ') press select;;
+			'') press enter;;
+			t)
+				read -r line
+				type_text "${line}"
+			;;
+			q) return;;
+		esac
+	done
+}
+info() {
+	curl --silent "http://${ROKU_HOST}/query/media-player" \
+	| ${PAGER:-less} \
+	;
+}
+discover() {
+	# This assumes we're searching a /24 subnet... manually.
+	ip="$(ip route get 1 | awk '{print $3; exit}' | sed 's@\.[^.]\+$@@')"
+	for i in $(seq 0 254)
+	do
+		if match="$(curl --connect-timeout .5 --silent "${ip}.${i}:8060/query/device-info" | grep --only-matching '<friendly-device-name>.*')"
+		then
+			match="$(echo "${match}" | sed 's@^\s*<[^>]*>@@; s@<\/[^>]*>$@@')"
+			printf '%s.%s\t%s\n' "${ip}" "${i}" "${match}"
+		else
+			echo "${ip}.${i}" >>/dev/stderr
+		fi
+	done
+}
+on_exit() {
+	log INFO Exiting...
+	code="${?}"
+	log DEBUG Cleaning up temporary files...
+	rm "${ROKU_MEDIA_QUERY}" 2>/dev/null || true
+	rm "${SEARCH_LIST}" 2>/dev/null || true
+	log DEBUG Cleaned up temporary files.
+	log INFO Exited.
+	log INFO
+	exit "${code}"
+}
+
+trap on_exit INT QUIT TERM EXIT
 invoked_as="$(basename "${0}")"
 main "${invoked_as}" "${@}"
