@@ -276,6 +276,9 @@ main() {
 	elif [ "${invoked_as}" = 'roku-search' ]
 	then
 		search "${@}"
+	elif [ "${invoked_as}" = 'roku-info' ]
+	then
+		info "${@}"
 	elif [ "${invoked_as}" = 'roku-type' ]
 	then
 		type_text "${@}"
@@ -448,6 +451,11 @@ remote() {
 			q) return;;
 		esac
 	done
+}
+info() {
+	curl --silent "http://${ROKU_HOST}/query/media-player" \
+	| ${PAGER:-less} \
+	;
 }
 discover() {
 	# This assumes we're searching a /24 subnet... manually.
